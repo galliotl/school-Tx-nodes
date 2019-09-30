@@ -3,15 +3,17 @@ package utt.tx
 import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
-import java.nio.charset.Charset
 import java.util.*
 import kotlin.concurrent.thread
+import utt.tx.interfaces.Nodeable
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 
 class SlaveNode(val port: kotlin.Int): Nodeable {
     private val MASTER_NODE_IP: String = "localhost"
     private val MASTER_NODE_PORT = 7777
 
-    private var osMasterNode: OutputStream = OutputStream.nullOutputStream()
+    private var osMasterNode: ObjectOutputStream = ObjectOutputStream(OutputStream.nullOutputStream())
 
     private val NODE_IP: String = "localhost"
     private val NODE_ID: String = "$NODE_IP$port"
@@ -20,27 +22,36 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
     private var listen = true
     private var connectedToMasterNode = false
 
+    private val data: HashMap<String, String> = HashMap<String, String>()
+
     override fun run() {
         // Start listening server
         thread{ listen() }
 
         // Start a connection with the main node
-        thread { connectionToMasterNode() } 
+        thread { connectionToMasterNode() }
     }
 
     fun connectionToMasterNode() {
         try {
-            val masterNodeSocket: Socket = Socket(MASTER_NODE_IP, MASTER_NODE_PORT)
-            osMasterNode = masterNodeSocket.getOutputStream()
-            val reader: Scanner = Scanner(masterNodeSocket.getInputStream())
+            val masterNodeSocket = Socket(MASTER_NODE_IP, MASTER_NODE_PORT)
+            osMasterNode = ObjectOutputStream(masterNodeSocket.getOutputStream())
+            val ois = ObjectInputStream(masterNodeSocket.getInputStream())
 
-            send(osMasterNode, NODE_ID)
+            val msg = Message(
+                msg="attempt to connect to master node",
+                senderIp = "localhost",
+                senderPort = this.port,
+                type = "connect"
+            )
+            send(osMasterNode, msg)
+
+            println("$NODE_ID: is connected to master node")
 
             connectedToMasterNode = true
-            println("$NODE_ID: is connected to master node")
             while (connectedToMasterNode) {
-                val text = reader.nextLine()
-                println("$port Message from MN: $text")
+                val msg = ois.readObject() as Message
+                handleMessage(msg, osMasterNode)
             }
         } catch (e: Exception) {
             connectedToMasterNode = false
@@ -59,8 +70,7 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
      * Handles a connection with a certain socket
      */
     override fun connectionHandler(socket: Socket) {
-        // val os: OutputStream = socket.getOutputStream()
-        val reader: Scanner = Scanner(socket.getInputStream())
+        val reader = Scanner(socket.getInputStream())
         
         var connected = true
         while (connected) {
@@ -72,13 +82,6 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
                 println("node $port has lost a connection")
             }
         }
-    }
-
-    /**
-     * sends a string to a given outputstream
-     */
-    override fun send(os: OutputStream, msg: String) {
-        os.write((msg + '\n').toByteArray(Charset.defaultCharset()))
     }
 
     override fun shutdown() {

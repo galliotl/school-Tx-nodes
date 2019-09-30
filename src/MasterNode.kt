@@ -1,11 +1,12 @@
 package utt.tx
 
-import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
-import java.nio.charset.Charset
 import java.util.*
 import kotlin.concurrent.thread
+import utt.tx.interfaces.Nodeable
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 
 /**
  * Sort of proxy
@@ -22,9 +23,8 @@ import kotlin.concurrent.thread
 class MasterNode : Nodeable {
     private val PORT = 7777
     private val server: ServerSocket = ServerSocket(PORT)
-    private val osMap: HashMap<String, OutputStream> = HashMap<String, OutputStream>()
+    private val osMap: HashMap<String, ObjectOutputStream> = HashMap<String, ObjectOutputStream>()
     private var listen = true
-    private var connectedToMasterNode = false
 
     override fun run() {
         // Start listening server
@@ -44,23 +44,16 @@ class MasterNode : Nodeable {
      * Handles a connection with a certain socket
      */
     override fun connectionHandler(socket: Socket) {
-        val os: OutputStream = socket.getOutputStream()
-        val reader: Scanner = Scanner(socket.getInputStream())
+        val oos = ObjectOutputStream(socket.getOutputStream())
+        val ois = ObjectInputStream(socket.getInputStream())
 
-        // The first msg we send is the nodeID
-        val nodeId: String = reader.nextLine()
-        osMap.put(nodeId, os)
-        print(osMap)
-        println("   MN: connected to $nodeId")
-
-        Thread.sleep(1000)
-        osMap.get(nodeId)?.let { send(it, "$nodeId, you better disconnect") }
         var connected = true
         while (connected) {
             try {
                 // At the moment we just print any msg
-                val text = reader.nextLine()
-                println("   MN received: $text")
+                val msg = ois.readObject() as Message
+                handleMessage(msg, oos)
+                println("   MN received: ${msg.msg}")
             } catch (ex: Exception) {
                 connected = false
                 println("master node has lost a connection")
@@ -68,11 +61,17 @@ class MasterNode : Nodeable {
         }
     }
 
-    /**
-     * sends a string to a given outputstream
-     */
-    override fun send(os: OutputStream, msg: String) {
-        os.write((msg + '\n').toByteArray(Charset.defaultCharset()))
+    override fun handleMessage(msg: Message, os: ObjectOutputStream) {
+        when(msg.type) {
+            "connect" -> {
+                val nodeId = "${msg.senderIp}${msg.senderPort}"
+                osMap[nodeId] = os
+                println("   MN: connected to $nodeId")
+            }
+            else -> {
+                print("   MN: type not known")
+            }
+        }
     }
 
     override fun shutdown() {
