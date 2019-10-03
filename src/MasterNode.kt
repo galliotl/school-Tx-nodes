@@ -18,7 +18,7 @@ import java.io.ObjectOutputStream
  *  a. Listen for messages from InputStream
  *  b. Can send messages to defined OutputStream
  *
- * V1: Keeps the connection thread active = highly unscalable
+ * V1: Keeps the connection thread active = highly non scalable
  */
 class MasterNode : Nodeable {
     private val PORT = 7777
@@ -46,30 +46,42 @@ class MasterNode : Nodeable {
     override fun connectionHandler(socket: Socket) {
         val oos = ObjectOutputStream(socket.getOutputStream())
         val ois = ObjectInputStream(socket.getInputStream())
+        var nodeId = ""
+        /**
+         * internal function is only used in a connection handler
+         */
+        fun handleMessage(msg: Message) {
+            when(msg.type) {
+                "connect" -> {
+                    nodeId = "${msg.senderIp}${msg.senderPort}"
+                    osMap[nodeId] = oos
+                    println("   MN: connected to $nodeId")
+                    send(oos, Message(
+                        msg="connection is confirmed",
+                        type="connect confirm", // TODO, find better name and write as class
+                        senderIp="localhost",
+                        senderPort=PORT
+                    ))
+                }
+                else -> {
+                    print("   MN: type not known, connection will shutdown")
+                    socket.close()
+                }
+            }
+        }
 
         var connected = true
         while (connected) {
             try {
-                // At the moment we just print any msg
                 val msg = ois.readObject() as Message
-                handleMessage(msg, oos)
-                println("   MN received: ${msg.msg}")
+                handleMessage(msg)
             } catch (ex: Exception) {
                 connected = false
-                println("master node has lost a connection")
-            }
-        }
-    }
-
-    override fun handleMessage(msg: Message, os: ObjectOutputStream) {
-        when(msg.type) {
-            "connect" -> {
-                val nodeId = "${msg.senderIp}${msg.senderPort}"
-                osMap[nodeId] = os
-                println("   MN: connected to $nodeId")
-            }
-            else -> {
-                print("   MN: type not known")
+                oos.close()
+                ois.close()
+                osMap.remove(nodeId)
+                println("   MN node has lost connection to $nodeId")
+                println("   MN still is connected to $osMap")
             }
         }
     }

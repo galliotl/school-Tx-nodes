@@ -9,4 +9,8 @@ fun main() {
 
     val node2 = SlaveNode(7779)
     node2.run()
+
+/*    Thread.sleep(2000)
+
+    node2.shutdown()*/
 }
