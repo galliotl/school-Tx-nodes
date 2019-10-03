@@ -21,6 +21,7 @@ import java.io.ObjectOutputStream
  * V1: Keeps the connection thread active = highly non scalable
  */
 class MasterNode : Nodeable {
+    private val IP = "localhost"
     private val PORT = 7777
     private val server: ServerSocket = ServerSocket(PORT)
     private val osMap: HashMap<String, ObjectOutputStream> = HashMap<String, ObjectOutputStream>()
@@ -59,7 +60,7 @@ class MasterNode : Nodeable {
                     send(oos, Message(
                         msg="connection is confirmed",
                         type="connect confirm", // TODO, find better name and write as class
-                        senderIp="localhost",
+                        senderIp=this.IP,
                         senderPort=PORT
                     ))
                 }
@@ -90,4 +91,10 @@ class MasterNode : Nodeable {
         listen = false
         server.close()
     }
+}
+
+
+fun main() {
+    val master = MasterNode()
+    master.run()
 }

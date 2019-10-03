@@ -95,3 +95,10 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
         osMasterNode.close()
     }
 }
+
+
+fun main(args: Array<String>) {
+    val port = args[0].toInt()
+    val slave = SlaveNode(port) // to change each time
+    slave.run()
+}
