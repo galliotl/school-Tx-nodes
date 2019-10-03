@@ -20,7 +20,6 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
 
     private val server: ServerSocket = ServerSocket(port)
     private var listen = true
-    private var connectedToMasterNode = false
 
     private val data: HashMap<String, String> = HashMap<String, String>()
 
@@ -36,25 +35,17 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
         try {
             val masterNodeSocket = Socket(MASTER_NODE_IP, MASTER_NODE_PORT)
             osMasterNode = ObjectOutputStream(masterNodeSocket.getOutputStream())
-            val ois = ObjectInputStream(masterNodeSocket.getInputStream())
 
             val msg = Message(
                 msg="attempt to connect to master node",
-                senderIp = "localhost",
+                senderIp = this.NODE_IP,
                 senderPort = this.port,
                 type = "connect"
             )
             send(osMasterNode, msg)
-
-            println("$NODE_ID: is connected to master node")
-
-            connectedToMasterNode = true
-            while (connectedToMasterNode) {
-                val msg = ois.readObject() as Message
-                handleMessage(msg, osMasterNode)
-            }
+            connectionHandler(masterNodeSocket)
         } catch (e: Exception) {
-            connectedToMasterNode = false
+            osMasterNode.close()
         }
     }
 
@@ -70,13 +61,28 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
      * Handles a connection with a certain socket
      */
     override fun connectionHandler(socket: Socket) {
-        val reader = Scanner(socket.getInputStream())
-        
+
+        val ois = ObjectInputStream(socket.getInputStream())
+        /**
+         * internal function is only used in a connection handler
+         */
+        fun handleMessage(msg: Message) {
+            when(msg.type) {
+                "connect confirm" -> {
+                    println("$NODE_ID: MN has confirmed connection")
+                }
+                else -> {
+                    print("$NODE_ID: type not known, connection will shutdown")
+                    socket.close()
+                }
+            }
+        }
+
         var connected = true
         while (connected) {
             try {
-                val text = reader.nextLine()
-                println(text)
+                val msg = ois.readObject() as Message
+                handleMessage(msg)
             } catch (ex: Exception) {
                 connected = false
                 println("node $port has lost a connection")
@@ -86,6 +92,6 @@ class SlaveNode(val port: kotlin.Int): Nodeable {
 
     override fun shutdown() {
         listen = false
-        connectedToMasterNode = false
+        osMasterNode.close()
     }
 }
