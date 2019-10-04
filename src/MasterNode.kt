@@ -7,6 +7,9 @@ import kotlin.concurrent.thread
 import utt.tx.interfaces.Nodeable
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.io.PrintWriter
+import java.net.InetSocketAddress
+import com.sun.net.httpserver.HttpServer
 
 /**
  * Sort of proxy
@@ -30,6 +33,7 @@ class MasterNode : Nodeable {
     override fun run() {
         // Start listening server
         thread{ listen() }
+        thread{ httpserver() }
     }
 
     override fun listen() {
@@ -87,6 +91,36 @@ class MasterNode : Nodeable {
         }
     }
 
+    fun httpserver() {
+        HttpServer.create(InetSocketAddress(7770), 0).apply {
+            createContext("/request") { http ->
+                when (http.requestMethod.toString()) {
+                    "GET" -> {
+                        http.responseHeaders.add("Content-type", "text/plain")
+                        http.sendResponseHeaders(200, 0)
+                        PrintWriter(http.responseBody).use { out ->
+                            out.println("Hello ${http.remoteAddress.hostName}!")
+                        }
+                    }
+                    "PUSH" -> {
+                        http.responseHeaders.add("Content-type", "text/plain")
+                        http.sendResponseHeaders(200, 0)
+                        PrintWriter(http.responseBody).use { out ->
+                            out.println("Hello ${http.remoteAddress.hostName}!")
+                        }
+                    }
+                    else -> {
+                        http.responseHeaders.add("Content-type", "text/plain")
+                        http.sendResponseHeaders(200, 0)
+                        PrintWriter(http.responseBody).use { out ->
+                            out.println("Do not use it")
+                        }
+                    }
+                }
+            }
+            start()
+        }
+    }
     override fun shutdown() {
         listen = false
         server.close()
