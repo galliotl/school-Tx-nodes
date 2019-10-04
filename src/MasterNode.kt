@@ -96,13 +96,14 @@ class MasterNode : Nodeable {
             createContext("/request") { http ->
                 when (http.requestMethod.toString()) {
                     "GET" -> {
+                        println(http.requestURI.query.toString())
                         http.responseHeaders.add("Content-type", "text/plain")
                         http.sendResponseHeaders(200, 0)
                         PrintWriter(http.responseBody).use { out ->
                             out.println("Hello ${http.remoteAddress.hostName}!")
                         }
                     }
-                    "PUSH" -> {
+                    "POST" -> {
                         http.responseHeaders.add("Content-type", "text/plain")
                         http.sendResponseHeaders(200, 0)
                         PrintWriter(http.responseBody).use { out ->
@@ -126,7 +127,6 @@ class MasterNode : Nodeable {
         server.close()
     }
 }
-
 
 fun main() {
     val master = MasterNode()
