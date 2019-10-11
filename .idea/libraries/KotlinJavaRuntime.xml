@@ -16,4 +16,5 @@
       <root url="jar://$KOTLIN_BUNDLED$/lib/kotlin-stdlib-jdk8-sources.jar!/" />
     </SOURCES>
   </library>
+
 </component>
