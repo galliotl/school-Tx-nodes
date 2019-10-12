@@ -4,26 +4,27 @@ fun main() {
 
     val masterNode = MasterNode()
     masterNode.run()
+    Thread.sleep(100)
+    val node1 = Node(7778)
+    node1.run()
 
-    val slaveNode = SlaveNode(7778)
-    slaveNode.run()
+    Thread.sleep(100)
+    val node2 = Node(7779)
+    node2.run()
 
-//    val slaveNode2 = SlaveNode(7779)
-//    slaveNode2.run()
-//
-//    val slaveNode3 = SlaveNode(7780)
-//    slaveNode3.run()
-//
-//    val slaveNode4 = SlaveNode(7781)
-//    slaveNode4.run()
-//
-    Thread.sleep(4000)
+    Thread.sleep(100)
+    val node3 = Node(7800)
+    node3.run()
 
-    slaveNode.shutdown()
-//    slaveNode2.shutdown()
-//
-//    Thread.sleep(5000)
-//
-//    slaveNode3.shutdown()
+    Thread.sleep(100)
+    val node4 = Node(7801)
+    node4.run()
 
+    Thread.sleep(100)
+    val node5 = Node(7802)
+    node5.run()
+
+    Thread.sleep(100)
+    val node6 = Node(7803)
+    node6.run()
 }
