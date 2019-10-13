@@ -22,7 +22,6 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
     }
 
     fun httpserver() {
-        println("   MN: listening for http requests on port $httpPort")
         val httpserver = HttpServer.create(InetSocketAddress(httpPort), 0).apply {
             createContext("/request") { http ->
                 when (http.requestMethod.toString()) {

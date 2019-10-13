@@ -2,7 +2,6 @@ package tx.nodes
 
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import tx.nodes.models.Message
 import tx.nodes.models.NodeReference
 import java.io.IOException
@@ -23,8 +22,8 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     protected val server = ServerSocket(port)
 
     // IP tree structure
-    val masterNodeReference = NodeReference("localhost", 7777)
-    val maxOfChild = 5
+    private val masterNodeReference = NodeReference("localhost", 7777)
+    private val maxOfChild = 5
     var parent:NodeReference = masterNodeReference
     var children:MutableList<NodeReference> = mutableListOf()
     var brothers:MutableList<NodeReference> = mutableListOf()
@@ -41,10 +40,11 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         active = false
         server.close()
     }
+    fun getReference(): NodeReference { return ownReference }
     /**
      * Is used to log a message, specifying the node who sent it
      */
-    fun log(msg: String) {
+    protected fun log(msg: String) {
         // atm we just print it
         println("$ownReference: $msg")
     }
@@ -52,14 +52,20 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
      * TCP server that listens on a given port and creates a coroutine to handle
      * every connections
      */
-    protected fun tcpServer() = runBlocking{
+    protected fun tcpServer() {
         active = true
         while (active) {
-            val node = server.accept()
-            GlobalScope.launch { connectionHandler(node) }
+            try {
+                val node = server.accept()
+                GlobalScope.launch { connectionHandler(node) }
+            } catch(ioe: IOException) {
+                // was just being scanned
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
-    fun connectionHandler(socket: Socket) {
+    protected fun connectionHandler(socket: Socket) {
         try {
             val oos = ObjectOutputStream(socket.getOutputStream())
             val ois = ObjectInputStream(socket.getInputStream())
@@ -68,7 +74,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
             fun addInChildren(node: NodeReference): Boolean {
                 if(children.size < maxOfChild) {
                     // we send all our children to the new child -> his brothers
-                    send(node, Message(type = "connect confrim", data = children, senderReference = ownReference))
+                    send(node, Message(type = "connect confirmed", data = children, senderReference = ownReference))
 
                     // we send a reference of the node to all of our children so they can populate their neighbour
                     for(child in children) {
@@ -99,17 +105,17 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                      * The 2 functions are therefore on opposition and getRandomChild cannot return a null value in this case.
                      */
                     "connect" -> {
-                        if(addInChildren(msg.senderReference)) {
-                            log("my children: ${children.toString()}")
-                        } else {
+                        if(!addInChildren(msg.senderReference)) {
                             // We send a msg to our child
                             val child = getRandomChild()
-                            log("passing responsibility of ${msg.senderReference} to $child as my list is full")
                             // is always true, but prevent compilation errors
                             if (child != null) {
                                 // we send the exact same msg to our child
+                                log("can't add ${msg.senderReference} to my children, massing it to $child")
                                 send(child, msg)
                             }
+                        } else {
+                            log("${msg.senderReference} is a new child of mine")
                         }
                     }
                     /**
@@ -117,22 +123,16 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                      * which reference can be found in the msg sent
                      * We get the brothers and update our parent
                      */
-                    "connect confirm" -> {
+                    "connect confirmed" -> {
                         parent = msg.senderReference
-                        log("my parent node is $parent")
                         if(msg.data is MutableList<*> && msg.data.size > 0 && msg.data[0] is NodeReference) {
                             brothers = msg.data as MutableList<NodeReference>
-                            log("my brothers: ${brothers.toString()}")
                         }
                     }
                     "add brother" -> {
                         if(msg.data is NodeReference) {
                             brothers.add(msg.data)
-                            log("my brothers: ${brothers.toString()}")
                         }
-                    }
-                    "crash report" -> {
-                        // We verify that we
                     }
                     else -> {
                         log("${msg.type} not known, connection will shutdown")
@@ -162,7 +162,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         }
     }
 
-    fun send(node: NodeReference, msg: Message) {
+    protected fun send(node: NodeReference, msg: Message) {
         try {
             val socket = Socket(node.ip, node.port)
             val os = ObjectOutputStream(socket.getOutputStream())
@@ -183,20 +183,25 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
          * Inner function, checks if a certain ip port node is reachable. It's a homemade solution as it will use Messages
          */
         fun isRemoteNodeReachable(node: NodeReference): Boolean {
-            var toReturn = false
-            try {
+            return try {
                 // If connection is accepted then it means the node is active
                 val socket = Socket(node.ip, node.port)
                 socket.close()
-                toReturn = true
-            } catch (e: Exception) { toReturn = false }
-            return toReturn
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
         while (active) {
             Thread.sleep(rate)
+            // verify that our child are connected
+            children.filter { isRemoteNodeReachable(it) }
+
+            // we verify that our parent is connected
             if(!isRemoteNodeReachable(parent)) {
-                // We contact master node to notify. The rest will be taken care of when we receive the answer
-                send(masterNodeReference, Message(type = "crash report", senderReference = ownReference, data = parent))
+                // We reconnect to the network going through the MN
+                log("parent $parent isn't reachable")
+                send(masterNodeReference, Message(type = "connect", senderReference = ownReference, data=parent))
             }
         }
     }
