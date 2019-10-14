@@ -13,7 +13,6 @@ import kotlin.concurrent.thread
 import kotlin.math.floor
 
 open class Node(protected val port: Int, protected val ip: String = "localhost") {
-    //________________________________FIELDS
     // Node detail
     protected var ownReference: NodeReference = NodeReference(ip, port)
 
@@ -29,7 +28,6 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     var brothers:MutableList<NodeReference> = mutableListOf()
 
 
-    //________________________________METHODS
     open fun run() {
         thread { tcpServer() }
         // we send a connection request to the master Node
@@ -111,11 +109,9 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                             // is always true, but prevent compilation errors
                             if (child != null) {
                                 // we send the exact same msg to our child
-                                log("can't add ${msg.senderReference} to my children, massing it to $child")
+                                log("can't add ${msg.senderReference} to my children, passing it to $child")
                                 send(child, msg)
                             }
-                        } else {
-                            log("${msg.senderReference} is a new child of mine")
                         }
                     }
                     /**
@@ -139,6 +135,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                     }
                 }
             }
+
             try {
                 val msg = ois.readObject() as Message
                 handleMessage(msg)
@@ -201,7 +198,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
             if(!isRemoteNodeReachable(parent)) {
                 // We reconnect to the network going through the MN
                 log("parent $parent isn't reachable")
-                send(masterNodeReference, Message(type = "connect", senderReference = ownReference, data=parent))
+                send(masterNodeReference, Message(type="connect", senderReference = ownReference))
             }
         }
     }

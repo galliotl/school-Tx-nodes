@@ -22,6 +22,34 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
     }
 
     fun httpserver() {
+        fun getQueryParams(params: String): String {
+            var toReturn = "could not find query params"
+            try {
+                val p = Pattern.compile("=(.*)")
+                val matcher = p.matcher(params)
+                if (matcher.find()) {
+                    toReturn = matcher.group(1)
+                }
+            } catch (ex: PatternSyntaxException) {
+                ex.printStackTrace()
+                // error handling
+            }
+            return toReturn
+        }
+        fun getQueryType(params: String): String {
+            var toReturn = "could not find query params"
+            try {
+                val p = Pattern.compile("(.*)=")
+                val matcher = p.matcher(params)
+                if (matcher.find()) {
+                    toReturn = matcher.group(1)
+                }
+            } catch (ex: PatternSyntaxException) {
+                ex.printStackTrace()
+            }
+            return toReturn
+        }
+
         val httpserver = HttpServer.create(InetSocketAddress(httpPort), 0).apply {
             createContext("/request") { http ->
                 when (http.requestMethod.toString()) {
@@ -52,33 +80,6 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
             }
             start()
         }
-    }
-    fun getQueryParams(params: String): String {
-        var toReturn = "could not find query params"
-        try {
-            val p = Pattern.compile("=(.*)")
-            val matcher = p.matcher(params)
-            if (matcher.find()) {
-                toReturn = matcher.group(1)
-            }
-        } catch (ex: PatternSyntaxException) {
-            ex.printStackTrace()
-            // error handling
-        }
-        return toReturn
-    }
-    fun getQueryType(params: String): String {
-        var toReturn = "could not find query params"
-        try {
-            val p = Pattern.compile("(.*)=")
-            val matcher = p.matcher(params)
-            if (matcher.find()) {
-                toReturn = matcher.group(1)
-            }
-        } catch (ex: PatternSyntaxException) {
-            ex.printStackTrace()
-        }
-        return toReturn
     }
 }
 
