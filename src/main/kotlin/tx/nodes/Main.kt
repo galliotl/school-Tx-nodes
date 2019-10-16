@@ -5,25 +5,21 @@ fun main() {
     val masterNode = MasterNode()
     masterNode.run()
 
-    val slaveNode = SlaveNode(7778)
-    slaveNode.run()
+    for (i in 0..3) {
+        Thread.sleep(100)
+        val node = Node(7000 + i)
+        node.run()
+    }
+    Thread.sleep(200)
+    val toStop = Node(8000)
+    toStop.run()
+    for (i in 4..15) {
+        Thread.sleep(100)
+        val node = Node(7000 + i)
+        node.run()
+    }
 
-//    val slaveNode2 = SlaveNode(7779)
-//    slaveNode2.run()
-//
-//    val slaveNode3 = SlaveNode(7780)
-//    slaveNode3.run()
-//
-//    val slaveNode4 = SlaveNode(7781)
-//    slaveNode4.run()
-//
     Thread.sleep(4000)
-
-    slaveNode.shutdown()
-//    slaveNode2.shutdown()
-//
-//    Thread.sleep(5000)
-//
-//    slaveNode3.shutdown()
-
+    println("Shutdown: ${toStop.getReference()}")
+    toStop.shutdown()
 }
