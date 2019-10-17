@@ -10,7 +10,7 @@ fun main() {
         val node = Node(7000 + i)
         node.run()
     }
-    Thread.sleep(200)
+    /*Thread.sleep(200)
     val toStop = Node(8000)
     toStop.run()
     for (i in 4..15) {
@@ -21,5 +21,5 @@ fun main() {
 
     Thread.sleep(4000)
     println("Shutdown: ${toStop.getReference()}")
-    toStop.shutdown()
+    toStop.shutdown()*/
 }
