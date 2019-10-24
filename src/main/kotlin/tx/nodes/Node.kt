@@ -142,8 +142,11 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                         if(dataMap[msg.data as String] != null) {
                             dataMap[msg.data]?.let { sendBackData(Message(type="get ok", data=it, senderReference=ownReference)) }
                         } else {
-                            oos.writeObject(Message(type="get no", senderReference=ownReference))
+                            oos.writeObject(Message(type="get no", senderReference=ownReference)) // TODO: change, doesn't check for childrens
                         }
+                    }
+                    "put" -> {
+
                     }
                     else -> {
                         log("${msg.type} not known, connection will shutdown")
