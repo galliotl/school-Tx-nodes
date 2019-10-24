@@ -19,6 +19,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     // Node activity
     protected var active = true
     protected val server = ServerSocket(port)
+    protected val dataMap: HashMap<String, Any> = HashMap()
 
     // IP tree structure
     private val masterNodeReference = NodeReference("localhost", 7777)
@@ -88,6 +89,13 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                 }
                 return false
             }
+            fun sendBackData(any: Any) {
+                try {
+                    oos.writeObject(any)
+                } catch(e:Exception) {
+                    log("can't send back the data")
+                }
+            }
             fun getRandomChild(): NodeReference? {
                 return children[floor(Math.random() * children.size).toInt()]
             }
@@ -128,6 +136,13 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                     "add brother" -> {
                         if(msg.data is NodeReference) {
                             brothers.add(msg.data)
+                        }
+                    }
+                    "get" -> {
+                        if(dataMap[msg.data as String] != null) {
+                            dataMap[msg.data]?.let { sendBackData(Message(type="get ok", data=it, senderReference=ownReference)) }
+                        } else {
+                            oos.writeObject(Message(type="get no", senderReference=ownReference))
                         }
                     }
                     else -> {
