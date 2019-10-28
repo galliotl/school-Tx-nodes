@@ -6,6 +6,7 @@ import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.ContentNegotiation
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.jackson.jackson
 import io.ktor.request.receive
 import io.ktor.response.respond
@@ -15,10 +16,13 @@ import io.ktor.routing.post
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import tx.nodes.models.Message
-import tx.nodes.models.NodeReference
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.io.Serializable
 import java.lang.Exception
 import java.net.Socket
 
@@ -27,13 +31,14 @@ import java.net.Socket
  */
 class MasterNode() : Node(ip = "localhost", port = 7777) {
     private val httpPort = 7770
-    private val dataRefMap: HashMap<String, NodeReference> = HashMap()
+    // private val dataRefMap: HashMap<String, NodeReference> = HashMap()
+    private val responseTimeout = 2000L
 
     override fun run() {
         // Start listening server
         thread { tcpServer() }
-        thread{ httpserver() }
-        thread{ idleCheck(10000) }
+        thread { httpserver() }
+        thread { idleCheck(10000) }
     }
 
     fun httpserver() {
@@ -46,11 +51,11 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
             routing {
                 get("/") {
                     val dataId = call.request.queryParameters["id"]
-                    val value = dataMap[dataId]
-                    if(value == null) {
-                        val node = dataRefMap[dataId]
-                        if(node == null) call.respondText("error, not known", ContentType.Text.Html)
-                        else {
+                    var returned = false
+                    val job = launch {
+                        // get the data
+                        val node = getRandomChild()
+                        if (node != null) {
                             try {
                                 val socket = Socket(node.ip, node.port)
                                 val ois = ObjectInputStream(socket.getInputStream())
@@ -62,19 +67,34 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
                                     )
                                 })
                                 val msg = ois.readObject() as Message
-                                call.respondText(msg.data.toString(), ContentType.Text.Html)
+                                when(msg.type) {
+                                    "get ok" -> {
+                                        call.respondText(msg.data.toString(), ContentType.Text.Html)
+                                        returned = true
+                                    }
+                                }
                             } catch(e:Exception) {
                                 log("couldn't send the request")
                                 call.respondText("error, host is not reachable", ContentType.Text.Html)
+                                e.printStackTrace()
                             }
-                            // We have to transfer the request to node
                         }
                     }
-                    else call.respondText(value.toString(), ContentType.Text.Html)
+                    delay(responseTimeout)
+                    job.cancelAndJoin()
+                    if(!returned) call.respond(HttpStatusCode.Accepted, mapOf("response" to "timeout"))
                 }
+                /**
+                 * We are going to use the data hashcode as an index
+                 */
                 post("/") {
-                    val data = call.receive<PostSnippet>()
-                    call.respond(mapOf("response" to "OK"))
+                    val data = call.receive<PostSnippet>() // Todo: adapt to our api
+                    call.respond(mapOf("uid" to data.hashCode()))
+                    var childrenFromRepProb = getChildrenFromRepProb()
+                    log("put request to ${childrenFromRepProb.size} children")
+                    for(child in childrenFromRepProb) {
+                        send(child, Message(type="put", senderReference=ownReference, data=data))
+                    }
                 }
             }
         }
@@ -90,8 +110,8 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
  *  }
  * }
  */
-data class PostSnippet(val data: PostSnippet.Text) {
-    data class Text(val text: String)
+data class PostSnippet(val data: Text): Serializable {
+    data class Text(val text: String): Serializable
 }
 
 fun main() {

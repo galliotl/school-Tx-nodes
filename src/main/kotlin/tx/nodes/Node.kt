@@ -2,6 +2,7 @@ package tx.nodes
 
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import tx.nodes.models.DHT
 import tx.nodes.models.Message
 import tx.nodes.models.NodeReference
 import java.io.IOException
@@ -19,7 +20,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     // Node activity
     protected var active = true
     protected val server = ServerSocket(port)
-    protected val dataMap: HashMap<String, Any> = HashMap()
+    protected val dataMap: HashMap<Int, Any> = HashMap()
 
     // IP tree structure
     private val masterNodeReference = NodeReference("localhost", 7777)
@@ -27,6 +28,8 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     var parent:NodeReference = masterNodeReference
     var children:MutableList<NodeReference> = mutableListOf()
     var brothers:MutableList<NodeReference> = mutableListOf()
+    var distributedHashTable = DHT()
+    val replicaProbability: Double = 0.5
 
 
     open fun run() {
@@ -96,8 +99,11 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                     log("can't send back the data")
                 }
             }
-            fun getRandomChild(): NodeReference? {
-                return children[floor(Math.random() * children.size).toInt()]
+            /**
+             * Tends to accumulate data in the later nodes aka leafs
+             */
+            fun shouldKeepData(): Boolean {
+                return Math.random() < 1/(children.size + 1)
             }
             fun handleMessage(msg: Message) {
                 when (msg.type) {
@@ -117,7 +123,6 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                             // is always true, but prevent compilation errors
                             if (child != null) {
                                 // we send the exact same msg to our child
-                                log("can't add ${msg.senderReference} to my children, passing it to $child")
                                 send(child, msg)
                             }
                         }
@@ -139,14 +144,55 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                         }
                     }
                     "get" -> {
-                        if(dataMap[msg.data as String] != null) {
+                        if(dataMap[msg.data] != null) {
                             dataMap[msg.data]?.let { sendBackData(Message(type="get ok", data=it, senderReference=ownReference)) }
                         } else {
-                            oos.writeObject(Message(type="get no", senderReference=ownReference)) // TODO: change, doesn't check for childrens
+                            // I don't have it personally
+                            val nodeList = distributedHashTable[msg.data as Int]
+                            nodeList?.get(0)?.let { send(it, msg) }
+                            val msg = ois.readObject() as Message
+                            when(msg.type) {
+                                "get ok" -> {
+                                    sendBackData(msg)
+                                }
+                            }
                         }
                     }
                     "put" -> {
+                        if(shouldKeepData()) {
+                            val uid = msg.data.hashCode()
+                            log("I'm keeping the data $uid")
+                            dataMap[uid] = msg.data
 
+                            // We confirm to the master node that we stored the data
+                            send(masterNodeReference, Message(type="put ok", senderReference=ownReference, data=uid))
+                        }
+                        for (child in getChildrenFromRepProb()) {
+                            // We send the data to the selected children
+                            send(child, msg)
+                        }
+                    }
+                    /**
+                     * Only used by the MasterNode.
+                     * msg.data = hashCode of the stored data
+                     * msg.senderReference = reference of the node that stores the data
+                     */
+                    "put ok" -> {
+                        log("${msg.senderReference} has kept the data ${msg.data}")
+                        for (child in children) {
+                            send(child, Message(type="new dht", senderReference=msg.senderReference, data=msg.data))
+                        }
+                    }
+                    /**
+                     * msg.senderReference = reference of the node that stored
+                     * msg.data = hashCode of the stored data
+                     */
+                    "new dht" -> {
+                        log(distributedHashTable.toString())
+                        distributedHashTable.add(msg.data as Int, msg.senderReference)
+
+                        // pass it on to your own children
+                        for(child in children) send(child, msg)
                     }
                     else -> {
                         log("${msg.type} not known, connection will shutdown")
@@ -177,6 +223,17 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         }
     }
 
+    protected fun getChildrenFromRepProb(): ArrayList<NodeReference> {
+        val toReturn: ArrayList<NodeReference> = ArrayList()
+        for(child in children) {
+            if(Math.random() > replicaProbability) toReturn.add(child)
+        }
+        return toReturn
+    }
+    fun getRandomChild(): NodeReference? {
+        return children[floor(Math.random() * children.size).toInt()]
+    }
+
     protected fun send(node: NodeReference, msg: Message) {
         try {
             val socket = Socket(node.ip, node.port)
@@ -184,6 +241,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
             os.writeObject(msg)
         } catch(ioe: IOException) {
             log("connection was closed by remote host -> received")
+            ioe.printStackTrace()
         } catch(e: Exception) {
             log("couldn't send the message")
             e.printStackTrace()
