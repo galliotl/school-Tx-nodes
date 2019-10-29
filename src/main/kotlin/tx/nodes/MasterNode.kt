@@ -34,6 +34,7 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
              */
             "put ok" -> {
                 log("${msg.senderReference} has kept the data ${msg.data}")
+                distributedHashTable.add(msg.data as Int, msg.senderReference)
                 sendMultiple(children, Message(type="new dht", senderReference=msg.senderReference, data=msg.data))
             }
             else -> super.dealWithMessage(msg)

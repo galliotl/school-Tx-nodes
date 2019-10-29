@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.ContentNegotiation
+import io.ktor.http.HttpStatusCode
 import io.ktor.jackson.jackson
 import io.ktor.request.receive
 import io.ktor.response.respond
+import io.ktor.response.respondRedirect
 import io.ktor.routing.get
 import io.ktor.routing.post
+import io.ktor.routing.route
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
@@ -60,13 +63,6 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     }
 
     /**
-     * Is used to log a message, specifying the node who sent it
-     */
-    protected open fun log(msg: String) {
-        // atm we just print it
-        println("$ownReference: $msg")
-    }
-    /**
      * TCP server that listens on a given port and creates a coroutine to handle
      * every connections
      */
@@ -86,35 +82,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         }
     }
 
-    /**
-     * On the Simple node side, we just add it to the message queue
-     */
-    open fun dealWithMessage(msg: Message) {
-        messageQueue.add(msg)
-    }
-
-    /**
-     * The process of adding a node in our children is as follows:
-     * - We check whether we have some available spaces in our children
-     * if yes:
-     * - we send to the node all of our children -> his brothers
-     * - we send to all of our children the new node reference
-     * - we add the node to our children
-     * if no:
-     * return false
-     */
-    private fun addInChildren(node: NodeReference): Boolean {
-        if(children.size < maxOfChild) {
-            send(node, Message(type = "connect confirmed", data = children, senderReference = ownReference))
-            sendMultiple(children, Message(senderReference = ownReference, type = "add brother", data = node))
-            children.add(node)
-            return true
-        }
-        return false
-    }
-
     protected fun worker() {
-
         /**
          * Tends to accumulate data in the later nodes aka leafs
          */
@@ -136,13 +104,8 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                      */
                     "connect" -> {
                         if (!addInChildren(msg.senderReference)) {
-                            // We send a msg to our child
                             val child = getRandomChild()
-                            // is always true, but prevent compilation errors
-                            if (child != null) {
-                                // we send the exact same msg to our child
-                                send(child, msg)
-                            }
+                            if (child != null) send(child, msg)
                         }
                     }
                     /**
@@ -189,40 +152,6 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
             }
         }
 
-    /**
-     * Returns a list of at least 1 nodeReference among our children given by the
-     * probabililty of replicability
-     */
-    private fun getChildrenFromRepProb(): List<NodeReference> {
-        val toReturn = children.filter { Math.random() > replicaProbability }.toMutableList()
-        if(toReturn.isEmpty()) getRandomChild()?.let {toReturn.add(it)}
-        return toReturn
-    }
-
-    private fun getRandomChild(): NodeReference? {
-        return if(children.isNotEmpty()) {
-            children[floor(Math.random() * children.size).toInt()]
-        } else null
-    }
-
-    private fun send(node: NodeReference, msg: Message) {
-        try {
-            val socket = Socket(node.ip, node.port)
-            val os = ObjectOutputStream(socket.getOutputStream())
-            os.writeObject(msg)
-        }
-        catch(ioe: IOException) {
-            log("connection was closed by remote host -> received")
-            ioe.printStackTrace()
-        } catch(e: Exception) {
-            log("couldn't send the message")
-            e.printStackTrace()
-        }
-    }
-
-    protected fun sendMultiple(nodes: List<NodeReference>, msg: Message) = runBlocking {
-        nodes.map { async { send(it, msg) } }.awaitAll()
-    }
     protected fun httpServer() {
         val server = embeddedServer(Netty, httpPort) {
             install(ContentNegotiation) {
@@ -231,27 +160,35 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                 }
             }
             routing {
-                get("/") {
-                    // check if we have the data
-
-                    // check who has the data
-
-                    // return respondRedirect
-                }
-                /**
-                 * We are going to use the data hashcode as an index
-                 */
-                post("/") {
-                    val data = call.receive<PostSnippet>() // Todo: adapt to our api
-                    call.respond(mapOf("uid" to data.hashCode()))
-                    val childs = getChildrenFromRepProb()
-                    println("passing it on to $childs")
-                    sendMultiple(childs, Message(type="put", senderReference=ownReference, data=data))
+                route("/") {
+                    get {
+                        val dataId = call.request.queryParameters["id"]?.toInt()
+                        // check if we have the data
+                        if(dataMap[dataId] != null) call.respond(mapOf("data" to dataMap[dataId]))
+                        // check who has the data
+                        else {
+                            val nodeList = distributedHashTable[dataId]
+                            log("$dataId -> $nodeList")
+                            if(nodeList.isNullOrEmpty()) call.respond(HttpStatusCode.BadRequest, "Id isn't correct")
+                            else {
+                                val randomChild = nodeList[floor(Math.random() * nodeList.size).toInt()]
+                                val url = "http://${randomChild.ip}:${randomChild.port + 1000}/?id=$dataId" // TODO: find a more reliable way to fin http port
+                                log(url)
+                                call.respondRedirect(url)
+                            }
+                        }
+                    }
+                    post {
+                        val data = call.receive<PostSnippet>() // Todo: adapt to our api
+                        call.respond(mapOf("uid" to data.hashCode()))
+                        sendMultiple(getChildrenFromRepProb(), Message(type="put", senderReference=ownReference, data=data))
+                    }
                 }
             }
         }
         server.start(wait = true)
     }
+
     /**
      * Idle check verifies that our children and parent are still active
      * children are just removed while parent triggers the reconnection
@@ -278,6 +215,77 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
                 send(masterNodeReference, Message(type="connect", senderReference = ownReference))
             }
         }
+    }
+
+
+
+    /**
+     * Is used to log a message, specifying the node who sent it
+     */
+    protected open fun log(msg: String) {
+        // atm we just print it
+        println("$ownReference: $msg")
+    }
+
+    /**
+     * On the Simple node side, we just add it to the message queue
+     */
+    open fun dealWithMessage(msg: Message) {
+        messageQueue.add(msg)
+    }
+
+    /* Children related-functions */
+    /**
+     * Returns a list of at least 1 nodeReference among our children given by the
+     * probabililty of replicability
+     */
+    private fun getChildrenFromRepProb(): List<NodeReference> {
+        val toReturn = children.filter { Math.random() > replicaProbability }.toMutableList()
+        if(toReturn.isEmpty()) getRandomChild()?.let {toReturn.add(it)}
+        return toReturn
+    }
+    private fun getRandomChild(): NodeReference? {
+        return if(children.isNotEmpty()) {
+            children[floor(Math.random() * children.size).toInt()]
+        } else null
+    }
+    /**
+     * The process of adding a node in our children is as follows:
+     * - We check whether we have some available spaces in our children
+     * if yes:
+     * - we send to the node all of our children -> his brothers
+     * - we send to all of our children the new node reference
+     * - we add the node to our children
+     * if no:
+     * return false
+     */
+    private fun addInChildren(node: NodeReference): Boolean {
+        if(children.size < maxOfChild) {
+            send(node, Message(type = "connect confirmed", data = children, senderReference = ownReference))
+            sendMultiple(children, Message(senderReference = ownReference, type = "add brother", data = node))
+            children.add(node)
+            return true
+        }
+        return false
+    }
+
+    /* TCP post functions */
+    private fun send(node: NodeReference, msg: Message) {
+        try {
+            val socket = Socket(node.ip, node.port)
+            val os = ObjectOutputStream(socket.getOutputStream())
+            os.writeObject(msg)
+        }
+        catch(ioe: IOException) {
+            log("connection was closed by remote host -> received")
+            ioe.printStackTrace()
+        } catch(e: Exception) {
+            log("couldn't send the message")
+            e.printStackTrace()
+        }
+    }
+    protected fun sendMultiple(nodes: List<NodeReference>, msg: Message) = runBlocking {
+        nodes.map { async { send(it, msg) } }.awaitAll()
     }
 }
 
