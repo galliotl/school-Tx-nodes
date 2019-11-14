@@ -4,10 +4,10 @@
 package tx.nodes
 
 import kotlin.test.Test
-import kotlin.test.assertNotNull
 
 class AppTest {
-    @Test fun test1() {
-        // TODO: implement tests
+    @Test fun masternodeRunning() {
+        val masterNode = MasterNode()
+        masterNode.run()
     }
 }

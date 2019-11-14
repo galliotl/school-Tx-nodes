@@ -3,6 +3,7 @@
  *
  * This generated file contains a sample Kotlin application project to get you started.
  */
+import org.gradle.jvm.tasks.Jar
 
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
@@ -21,20 +22,15 @@ repositories {
 dependencies {
     // Align versions of all Kotlin components
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
-
     // Use the Kotlin JDK 8 standard library.
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-
     // Kotlinx library
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.2")
-
     // Ktor
     implementation("io.ktor:ktor-server-netty:1.2.4")
     implementation("io.ktor:ktor-jackson:1.2.4")
-
     // Use the Kotlin test library.
     testImplementation("org.jetbrains.kotlin:kotlin-test")
-
     // Use the Kotlin JUnit integration.
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
 }
@@ -42,4 +38,18 @@ dependencies {
 application {
     // Define the main class for the application
     mainClassName = "tx.nodes.MasterNodeKt"
+}
+
+val fatJar = task("fatJar", type = Jar::class) {
+    manifest {
+        attributes["Main-Class"] = "tx.nodes.MasterNodeKt"
+    }
+    from(configurations.runtimeClasspath.get().map({ if (it.isDirectory) it else zipTree(it) }))
+    with(tasks.jar.get() as CopySpec)
+}
+
+tasks {
+    "build" {
+        dependsOn(fatJar)
+    }
 }

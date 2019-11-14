@@ -1,7 +1,8 @@
 package tx.nodes
 
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
 import tx.nodes.models.Message
-import kotlin.concurrent.thread
 
 /**
  * Just a paticular node that we know the ip/port of
@@ -12,10 +13,8 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
 
     override fun run() {
         log("running...")
-        thread { tcpServer() }
-        thread { httpServer() }
-        thread { worker() }
-        thread { idleCheck(10000) }
+        val jobs = startMainCoroutines()
+        runBlocking { joinAll(*jobs.toTypedArray()) }
     }
 
     override fun log(msg: String) {

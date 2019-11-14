@@ -23,13 +23,12 @@ import java.io.IOException
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
-import java.net.ConnectException
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
-import kotlin.concurrent.thread
+import kotlinx.coroutines.GlobalScope
 import kotlin.math.floor
 
 open class Node(protected val port: Int, protected val ip: String = "localhost") {
@@ -53,21 +52,26 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     var distributedHashTable = DHT()
     private val replicaProbability: Double = 0.5
 
-
     open fun run() {
-        thread { tcpServer() }
-        thread { httpServer() }
-        thread { worker() }
+        val jobs = startMainCoroutines()
         send(masterNodeReference, Message(senderReference = ownReference, type = "connect"))
-        thread { idleCheck(10000) }
+        runBlocking { joinAll(*jobs.toTypedArray()) }
+    }
+
+    protected fun startMainCoroutines(): List<Job> {
+        val jobs = mutableListOf(GlobalScope.launch{tcpServer()})
+        jobs += GlobalScope.launch { httpServer() }
+        jobs += GlobalScope.launch { worker() }
+        jobs += GlobalScope.launch { idleCheck(10000) }
+
+        return jobs
     }
 
     /**
      * TCP server that listens on a given port and creates a coroutine to handle
      * every connections
      */
-    protected fun tcpServer() {
-        active = true
+    private fun tcpServer() {
         while (active) {
             try {
                 val node = server.accept()
@@ -82,7 +86,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         }
     }
 
-    protected fun worker() {
+    private fun worker() {
         /**
          * Tends to accumulate data in the later nodes aka leafs
          */
@@ -152,7 +156,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
             }
         }
 
-    protected fun httpServer() {
+    private suspend fun httpServer() {
         val server = embeddedServer(Netty, httpPort) {
             install(ContentNegotiation) {
                 jackson {
@@ -194,7 +198,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
      * children are just removed while parent triggers the reconnection
      * to the network
      */
-    protected fun idleCheck(rate: Long) {
+    private fun idleCheck(rate: Long) {
         fun isRemoteNodeReachable(node: NodeReference): Boolean {
             return try {
                 // If connection is accepted then it means the node is active
@@ -286,6 +290,10 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
     }
     protected fun sendMultiple(nodes: List<NodeReference>, msg: Message) = runBlocking {
         nodes.map { async { send(it, msg) } }.awaitAll()
+    }
+
+    protected fun shutdown() {
+        active = false
     }
 }
 
