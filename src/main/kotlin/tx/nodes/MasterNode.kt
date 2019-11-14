@@ -50,7 +50,7 @@ class MasterNode() : Node(ip = "localhost", port = 7777) {
             return toReturn
         }
 
-        val httpserver = HttpServer.create(InetSocketAddress(httpPort), 0).apply {
+        HttpServer.create(InetSocketAddress(httpPort), 0).apply {
             createContext("/request") { http ->
                 when (http.requestMethod.toString()) {
                     "GET" -> {

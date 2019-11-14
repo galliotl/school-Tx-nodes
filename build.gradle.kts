@@ -37,5 +37,5 @@ dependencies {
 
 application {
     // Define the main class for the application
-    mainClassName = "tx.nodes.MainKt"
+    mainClassName = "tx.nodes.MasterNodeKt"
 }
