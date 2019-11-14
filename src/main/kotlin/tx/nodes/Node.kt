@@ -292,7 +292,7 @@ open class Node(protected val port: Int, protected val ip: String = "localhost")
         nodes.map { async { send(it, msg) } }.awaitAll()
     }
 
-    protected fun shutdown() {
+    fun shutdown() {
         active = false
     }
 }

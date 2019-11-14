@@ -3,11 +3,20 @@
  */
 package tx.nodes
 
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import java.lang.Thread.sleep
 import kotlin.test.Test
 
 class AppTest {
     @Test fun masternodeRunning() {
-        val masterNode = MasterNode()
-        masterNode.run()
+        val masterNode = GlobalScope.launch { MasterNode().run() }
+        sleep(100)
+        masterNode.cancel()
+    }
+    @Test fun nodeRunning() {
+        val node = GlobalScope.launch { Node(7778).run() }
+        sleep(100)
+        node.cancel()
     }
 }
