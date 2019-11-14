@@ -1,84 +1,43 @@
 package tx.nodes
 
+import tx.nodes.models.Message
 import kotlin.concurrent.thread
-import java.io.PrintWriter
-import java.net.InetSocketAddress
-import com.sun.net.httpserver.HttpServer
-import java.util.regex.Pattern
-import java.util.regex.PatternSyntaxException
-
 
 /**
- * TODO: define
+ * Just a paticular node that we know the ip/port of
+ * Also, it handles some specific messages compared to our
+ * regular Nodes
  */
 class MasterNode() : Node(ip = "localhost", port = 7777) {
-    private val httpPort = 7770
 
     override fun run() {
-        // Start listening server
+        log("running...")
         thread { tcpServer() }
-        thread{ httpserver() }
-        thread{ idleCheck(10000) }
+        thread { httpServer() }
+        thread { worker() }
+        thread { idleCheck(10000) }
     }
 
-    fun httpserver() {
-        fun getQueryParams(params: String): String {
-            var toReturn = "could not find query params"
-            try {
-                val p = Pattern.compile("=(.*)")
-                val matcher = p.matcher(params)
-                if (matcher.find()) {
-                    toReturn = matcher.group(1)
-                }
-            } catch (ex: PatternSyntaxException) {
-                ex.printStackTrace()
-                // error handling
-            }
-            return toReturn
-        }
-        fun getQueryType(params: String): String {
-            var toReturn = "could not find query params"
-            try {
-                val p = Pattern.compile("(.*)=")
-                val matcher = p.matcher(params)
-                if (matcher.find()) {
-                    toReturn = matcher.group(1)
-                }
-            } catch (ex: PatternSyntaxException) {
-                ex.printStackTrace()
-            }
-            return toReturn
-        }
+    override fun log(msg: String) {
+        println("MN: $msg")
+    }
 
-        HttpServer.create(InetSocketAddress(httpPort), 0).apply {
-            createContext("/request") { http ->
-                when (http.requestMethod.toString()) {
-                    "GET" -> {
-                        println("   MN: ${getQueryParams(http.requestURI.query.toString())}")
-                        println("   MN: ${getQueryType(http.requestURI.query.toString())}")
-                        http.responseHeaders.add("Content-type", "text/plain")
-                        http.sendResponseHeaders(200, 0)
-                        PrintWriter(http.responseBody).use { out ->
-                            out.println("Hello ${http.remoteAddress.hostName}!")
-                        }
-                    }
-                    "POST" -> {
-                        http.responseHeaders.add("Content-type", "text/plain")
-                        http.sendResponseHeaders(200, 0)
-                        PrintWriter(http.responseBody).use { out ->
-                            out.println("Hello ${http.remoteAddress.hostName}!")
-                        }
-                    }
-                    else -> {
-                        http.responseHeaders.add("Content-type", "text/plain")
-                        http.sendResponseHeaders(200, 0)
-                        PrintWriter(http.responseBody).use { out ->
-                            out.println("Do not use it")
-                        }
-                    }
-                }
+    /**
+     * The MN has some specific msgs he has to take into consideration
+     */
+    override fun dealWithMessage(msg: Message) {
+        when(msg.type) {
+            /**
+             * msg.data = hashCode of the stored data
+             * msg.senderReference = reference of the node that stores the data
+             * We send this information to all of the nodes
+             */
+            "put ok" -> {
+                log("${msg.senderReference} has kept the data ${msg.data}")
+                distributedHashTable.add(msg.data as Int, msg.senderReference)
+                sendMultiple(children, Message(type="new dht", senderReference=msg.senderReference, data=msg.data))
             }
-            start()
+            else -> super.dealWithMessage(msg)
         }
     }
 }

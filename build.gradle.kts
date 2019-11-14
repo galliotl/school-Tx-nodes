@@ -28,6 +28,10 @@ dependencies {
     // Kotlinx library
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.2")
 
+    // Ktor
+    implementation("io.ktor:ktor-server-netty:1.2.4")
+    implementation("io.ktor:ktor-jackson:1.2.4")
+
     // Use the Kotlin test library.
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 
