@@ -3,6 +3,7 @@ package tx.nodes
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import tx.nodes.models.Message
+import tx.nodes.models.NodeReference
 
 /**
  * Just a paticular node that we know the ip/port of

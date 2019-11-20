@@ -11,11 +11,10 @@ plugins {
 
     // Apply the application plugin to add support for building a CLI application.
     application
+    id("com.palantir.docker") version "0.22.1"
 }
 
 repositories {
-    // Use jcenter for resolving dependencies.
-    // You can declare any Maven/Ivy/file repository here.
     jcenter()
 }
 
@@ -44,7 +43,7 @@ val fatJar = task("fatJar", type = Jar::class) {
     manifest {
         attributes["Main-Class"] = "tx.nodes.MasterNodeKt"
     }
-    from(configurations.runtimeClasspath.get().map({ if (it.isDirectory) it else zipTree(it) }))
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     with(tasks.jar.get() as CopySpec)
 }
 
@@ -52,4 +51,10 @@ tasks {
     "build" {
         dependsOn(fatJar)
     }
+}
+
+docker {
+    name = "masternode"
+    files("${buildDir.absoluteFile}/libs/Tx-nodes.jar")
+    buildArgs(mapOf("JAR_FILE" to "Tx-nodes.jar"))
 }
