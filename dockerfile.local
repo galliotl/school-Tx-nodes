@@ -1,0 +1,6 @@
+# running container directly from the project folder -> not suitable for pipelines
+FROM openjdk:8-jre-alpine
+COPY ./build/libs/Tx-nodes.jar /app/my-application.jar
+WORKDIR /app
+EXPOSE 80
+CMD ["java", "-jar", "my-application.jar"]
