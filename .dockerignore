@@ -1,0 +1,7 @@
+.gradle
+.idea
+.git
+.gitignore
+azure-pipelines
+README.md
+Tx-nodes.iml

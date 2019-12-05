@@ -1,22 +1,18 @@
-# tx-nodes
+# tx-nodes: docker version
 
 ## Run
 
-It is possible to run the project independently of the IDE you run it on using gradle with: 
+To run this project, you must have docker ce installed on your machine.
+As you can see, we use docker compose to orchestrate our containers.
+As our container is using gradle, it takes a lot of time to load because it creates a deamon each time.
+To counter that when you need to test it very quickly, you can build the project, then use the local docker-compose file
 
-```bash
-gradle run
+```code
+gradle build    // it creates the jar library in the build directory
 ```
 
-## Project structure
-
-```
-|_ models
-    |_ Message
-    |_ NodeReference
-|_ Main
-|_ MasterNode
-|_ Node
+```code
+docker-compose -f local-compose.yml up --build
 ```
 
 ### Node 
@@ -24,24 +20,6 @@ gradle run
 The Node class implements all of our nodes common functionalities s.as. a tcp Server in order to communicate with its peers etc.
 It holds a ref to the master node which allows it to be integrated in the network by sending a `connection request` to the MN.
 We handle received messages in a `connection handler` which reads the message of the connection `socket` and, givent its type deals with it in different manners (cf. `NodeClass.connectionHandler.handleMessage()`)
-
-### MasterNode (MN)
-
-The MasterNode class extends Node and adds functions specific to the MN s.as. a http server in order to receive requests from clients
-
-## Models
-
-### Message
-
-A message is a serializable object that can therefore be transmitted via socket streams. It holds:
-
-- `senderReference`: a NodeReference of the sender
-- `type`: a String describing the intent of the message
-- `data`: an object of any type that holds a serializable object to be transmitted
-
-### NodeReference
-
-It contains an IP/Port able to uniquely identify each node. We can also use those IP/Port to pass it to the send method from the node.
 
 ## Connexion between nodes
 

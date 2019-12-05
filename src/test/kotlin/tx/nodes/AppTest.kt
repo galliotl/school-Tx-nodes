@@ -3,20 +3,117 @@
  */
 package tx.nodes
 
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import java.lang.Thread.sleep
-import kotlin.test.Test
 
 class AppTest {
-    @Test fun masternodeRunning() {
-        val masterNode = GlobalScope.launch { MasterNode().run() }
-        sleep(100)
-        masterNode.cancel()
+    /*var MNHttpPort = 8777
+
+    /**
+     * Verifies that a node can connect to masterNode
+     */
+    @Test() fun `Checks that a single node can connect to a masternode and both run`() {
+        val masterNode = thread { MasterNode(debugMN = true).run() }
+        sleep(300)
+        val node = thread { Node(debug=true).run() }
+        sleep(3000)
+        node.interrupt()
+        masterNode.interrupt()
     }
-    @Test fun nodeRunning() {
-        val node = GlobalScope.launch { Node(7778).run() }
-        sleep(100)
-        node.cancel()
+
+    /**
+     * Test that a lot of nodes can be added to the masterNode
+     */
+    @Test fun `20 nodes can be added`() {
+        threadXNodes(20)
+        // We give the test 10 secs to execute
+        sleep(30000)
     }
+
+    /**
+     * Test that a lot of nodes can be added to the masterNode
+     */
+    @Test fun `We can safely remove any node`() {
+        val testJob = thread {
+            GlobalScope.launch { MasterNode(debugMN = true).run() }
+            for(i in 0..5) {
+                GlobalScope.launch {
+                    Node(debug=true).run()
+                    delay(50)
+                }
+            }
+            val jobToCrash = GlobalScope.launch { Node(debug=true).run() }
+            for(i in 6..10) {
+                GlobalScope.launch {
+                    Node(debug=true).run()
+                    delay(50)
+                }
+            }
+            jobToCrash.cancel()
+            println("finished")
+        }
+
+        // We give the test 10 secs to execute
+        sleep(10000)
+        testJob.interrupt()
+    }
+
+    @Test fun `Testing response time with 10 nodes and 1 item`() {
+        var millisPost: Long? = null
+        var millisGet: Long? = null
+        triggerXNodes(10)
+
+        val testJob = GlobalScope.launch {
+            delay(10000)
+            println("launch test job")
+            val client = HttpClient(Apache)
+            println("server created")
+            var message: ApiGetResponse? = null
+
+            println("starting measuring time")
+            millisPost = measureTimeMillis {
+                message = client.post<ApiGetResponse> {
+                    url("localhost:$MNHttpPort/")
+                    contentType(ContentType.Application.Json)
+                    body = PostSnippet(data=PostSnippet.Text("test string message"))
+                }
+            }
+            println("finished measuring time")
+            client.close()
+            delay(100)
+            println("starting measuring get")
+            millisGet = measureTimeMillis { URL("localhost:$MNHttpPort?id=${message?.data}").readText() }
+            println("finished post")
+        }
+        println("Post took $millisPost ms \nGet took $millisGet ms")
+    }
+
+    /**
+     * Returns a never finishing thread that create a certain number of nodes
+     */
+    fun triggerXNodes(x: Int): Thread {
+        return thread {
+            val jobs: MutableList<Job> = mutableListOf(GlobalScope.launch { MasterNode(debugMN = true).run() })
+            runBlocking { delay(3000) }
+            jobs += GlobalScope.launch {
+                Node(debug=true).run()
+            }
+            runBlocking { delay(1000) }
+            for(i in 0..x) {
+                runBlocking { delay(1000) }
+                GlobalScope.launch {
+                    Node(debug=true).run()
+                }
+                println("job $i")
+            }
+            runBlocking { joinAll(*jobs.toTypedArray()) }
+        }
+    }
+
+    fun threadXNodes(x: Int) {
+        thread { MasterNode(debugMN = true).run() }
+        sleep(1000)
+        for (i in 0..x) {
+            sleep(2000)
+            thread { Node(port = 7000 + i, debug = true).run() }
+        }
+    }*/
 }

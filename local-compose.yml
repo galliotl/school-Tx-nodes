@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  masternode:
+    build:
+      context: .
+      dockerfile: dockerfile.local
+    ports:
+      - 8080:80
+    environment:
+      - MN=TRUE
+  node1:
+    build:
+      context: .
+      dockerfile: dockerfile.local
+    ports:
+      - 8081:80
+  node2:
+    build:
+      context: .
+      dockerfile: dockerfile.local
+    ports:
+      - 8082:80
+  node3:
+    build:
+      context: .
+      dockerfile: dockerfile.local
+    ports:
+      - 8083:80
