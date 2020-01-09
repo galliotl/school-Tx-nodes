@@ -18,13 +18,13 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import kotlinx.coroutines.*
 import tx.nodes.API.ApiDhtDetail
-import tx.nodes.API.ApiGetResponse
 import tx.nodes.API.ApiPostResponse
 import tx.nodes.models.DHT
 import tx.nodes.API.PostSnippet
 import tx.nodes.http.HttpClientWrapper
 import tx.nodes.strategy.DecisionMaking
 import tx.nodes.strategy.DefaultStrategy
+import tx.nodes.strategy.IncompleteDhtStrategy
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 
@@ -44,7 +44,7 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
     private val httpClient = HttpClientWrapper()
 
     // IP tree structure
-    private var parent:String = "masternode"
+    private var myParent:String = "masternode"
     private var myChildren: ArrayList<String> = ArrayList()
     private var distributedHashTable = DHT()
 
@@ -82,31 +82,31 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
                         val dataId = call.request.queryParameters["id"]?.toInt()
                         // check if we have the data
                         log("I received a get message for id: $dataId")
-                        if(dataMap[dataId] != null) call.respond(ApiGetResponse(data = dataMap[dataId] as String))
-                        // check who has the data
-                        else {
-                            val ip = dataId?.let { it1 -> decisionMaking.dataExists(it1, distributedHashTable) }
-                            if(ip == null) call.respond(HttpStatusCode.BadRequest, "Id isn't correct")
-                            else {
-                                log("I'm transferring the call to $ip, url: http://$ip/?id=$dataId")
-                                val data = httpClient.getTransfer(ip=ip, dataId=dataId)
-                                call.respond(data)
-                            }
-                        }
+                        val valueToReturn = dataId?.let { it1 -> decisionMaking.handleGet(
+                            dataid = it1,
+                            datamap = dataMap,
+                            dht = distributedHashTable,
+                            parent = myParent
+                        ) }
+                        if (valueToReturn == null) call.respond(
+                            status = HttpStatusCode.NotFound,
+                            message = "data not found"
+                        )
+                        else call.respond(valueToReturn)
                     }
                     post {
                         val snippet = call.receive<PostSnippet>()
                         val data = snippet.data.text
                         log("I received a message")
-                        if(decisionMaking.shouldKeepData(myChildren.size)) {
-                            dataMap[data.hashCode()] = data
-                            log("I keep the data: \n$dataMap")
-                            decisionMaking.notifyDht(data.hashCode(), amIMasterNode, myChildren)
-                            log("everyone has been notified")
-                        }
-                        decisionMaking.transferForReplication(snippet, myChildren)
-                        log("I sent the message to my children")
-                        // it assumes that at least one node will store it
+                        decisionMaking.handlePost(
+                            data = data,
+                            children = myChildren,
+                            mn = amIMasterNode,
+                            datamap = dataMap,
+                            parent = myParent,
+                            dht = distributedHashTable
+                        )
+                        log("was value added ? ${dataMap[data.hashCode()]}")
                         call.respond(ApiPostResponse(data.hashCode()))
                     }
                 }
@@ -116,9 +116,7 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
                 route("/connect") {
                     get {
                         val senderIp = call.request.origin.remoteHost
-
                         log("I received a connection request from $senderIp")
-
                         // we can add him = we send ok
                         if (decisionMaking.canAddNewChild(senderIp, myChildren)) {
                             log("$senderIp has been added to my children")
@@ -138,7 +136,6 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
                 route("/api/ping") {
                     get {
                         call.respond(HttpStatusCode.OK)
-                        val dataId = call.receive<Int>()
                     }
                 }
                 /**
@@ -148,16 +145,27 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
                     post {
                         val senderIp = call.request.origin.remoteHost
                         val dhtDetail = call.receive<ApiDhtDetail>()
-
-                        // every node is ownIp agnistic so it is possible we receive a detail without an ip, then it means the sender is the owner
-                        if(dhtDetail.owner == null) dhtDetail.owner = senderIp
-                        log("${dhtDetail.owner} has added ${dhtDetail.dataId} to its db")
-
-                        // I add this new information to my dht
-                        distributedHashTable.add(dhtDetail.dataId, dhtDetail.owner!!)
-                        log("dht:\n$distributedHashTable")
-                        // I delegate the handling of how to transfer it
-                        decisionMaking.transferDhtProtocol(dhtDetail, children = myChildren)
+                        decisionMaking.handlePostDht(
+                            senderIp = senderIp,
+                            dhtDetail = dhtDetail,
+                            dht = distributedHashTable,
+                            children = myChildren
+                        )
+                    }
+                    get {
+                        val dataId = call.request.queryParameters["id"]?.toInt()
+                        if (dataId == null) {
+                            call.respond(HttpStatusCode.BadRequest, "no id specified")
+                            return@get
+                        }
+                        val node = decisionMaking.handleGetDht(
+                            children = myChildren,
+                            dht = distributedHashTable,
+                            parent = myParent,
+                            dataid = dataId
+                        )
+                        val dhtDetail = ApiDhtDetail(dataId = dataId, owner = node)
+                        call.respond(dhtDetail)
                     }
                 }
             }
@@ -173,9 +181,9 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
     private suspend fun pingCheck(rate: Long = 10000) {
         while (active) {
             delay(rate)
-            if(!httpClient.ping(parent) && !amIMasterNode) {
+            if(!httpClient.ping(myParent) && !amIMasterNode) {
                 // We reconnect to the network going through the MN
-                log("parent $parent isn't reachable")
+                log("parent $myParent isn't reachable")
                 connectionToMasterNode()
             }
             if(myChildren.isNotEmpty()) {
@@ -193,8 +201,8 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
         }
         val call = httpClient.masternodeConnectGet()
         if(call.response.status == HttpStatusCode.OK) {
-            parent = call.request.url.host
-            log("my new parent is $parent")
+            myParent = call.request.url.host
+            log("my new parent is $myParent")
         } else {
             log(call.response.status.toString())
         }
@@ -207,6 +215,13 @@ open class Node(val amIMasterNode: Boolean = false, private val decisionMaking: 
 
 fun main() {
     val mnVar: String = System.getenv("MN") ?: "default_value"
-    val node = Node(debug = true, amIMasterNode=(mnVar == "TRUE"), decisionMaking = DefaultStrategy())
+
+    val strategy = IncompleteDhtStrategy() // DefaultStrategy()
+
+    val node = Node(
+        debug = true,
+        amIMasterNode=(mnVar == "TRUE"),
+        decisionMaking = strategy
+    )
     node.run()
 }

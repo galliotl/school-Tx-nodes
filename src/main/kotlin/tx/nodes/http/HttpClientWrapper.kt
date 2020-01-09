@@ -55,4 +55,8 @@ class HttpClientWrapper {
     suspend fun getTransfer(ip: String, dataId: Int): ApiGetResponse {
         return httpClient.get("http://$ip/?id=$dataId")
     }
+
+    suspend fun dhtGet(ip: String, dataId: Int): String? {
+        return httpClient.get("http://$ip/?id=$dataId")
+    }
 }
